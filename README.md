@@ -29,3 +29,11 @@ Get all easy challenges:\
 
 All challenges: *(not recommended - search function on the reddit api is slightly inaccurate and many could be wrong)*\
 ```dp all```
+
+## Dependencies
+* zlib
+* cpr
+* nlohmann_json
+* boost
+  * program_options
+  * algorithm/string
