@@ -8,7 +8,7 @@
 // boost
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
-// external
+// network
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 
