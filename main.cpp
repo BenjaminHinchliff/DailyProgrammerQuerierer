@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
     const cpr::Header oauthHeader{ {"Authorization", "bearer " + token} };
 
     // compute min and max challenges
-    int minChallenge = 0;
-    int maxChallenge = 0;
+    int minChallenge = 1;
+    int maxChallenge = 1;
     if (challengeRange == "all")
     {
         maxChallenge = getLatestChallengeNumber(oauthHeader);
