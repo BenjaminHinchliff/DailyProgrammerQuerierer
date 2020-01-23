@@ -4,8 +4,10 @@
 #include <stdexcept>
 #include <string>
 #include <filesystem>
+#include <algorithm>
 // boost
 #include <boost/program_options.hpp>
+#include <boost/algorithm/string.hpp>
 // external
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
@@ -27,7 +29,6 @@ std::string authenticate()
             { "device_id", "DO_NOT_TRACK_THIS_DEVICE" }
         }
     );
-    std::cout << tokenRequest.text << '\n';
     if (tokenRequest.status_code == 200)
     {
         return json::parse(tokenRequest.text)["access_token"];
@@ -38,20 +39,38 @@ std::string authenticate()
     }
 }
 
-int main(int argc, char* argv[]) 
+int getLatestChallengeNumber(cpr::Header oauthHeader)
 {
+    cpr::Header requestHeaders{ oauthHeader };
+    requestHeaders.insert(agent.begin(), agent.end());
+    const cpr::Response request{ cpr::Get(
+        cpr::Url{ "https://oauth.reddit.com/r/dailyprogrammer/new" },
+        requestHeaders,
+        cpr::Parameters{
+            {"limit", "1"}
+        }
+    ) };
+    const std::string title{ json::parse(request.text)["data"]["children"][0]["data"]["title"] };
+    size_t numStart = title.find('#') + 1;
+    return std::stoi(title.substr(numStart, title.find(' ', numStart) - numStart));
+}
+
+int main(int argc, char* argv[])
+{
+    // parse options
     po::options_description desc{ "Options" };
-    int challengeNum;
+    std::string challengeRange;
     std::vector<std::string> difficulties;
     std::string outputPath;
+    const std::vector<std::string> defaultDifficulties{ "easy", "intermediate", "hard" };
     desc.add_options()
         ("help,h", "print help message to stdout")
-        ("number,n", po::value<int>(&challengeNum)->default_value(10), "number of the challenge to download (positional)")
+        ("number,n", po::value<std::string>(&challengeRange)->required(), "number of the challenges to download or range or all) (positional)")
         (
             "difficulties,d",
             po::value<std::vector<std::string>>(&difficulties)
                 ->multitoken()
-                ->default_value(std::vector<std::string>{"easy", "intermediate", "hard"}, "easy, intermediate, hard"),
+                ->default_value(defaultDifficulties, "[" + boost::algorithm::join(defaultDifficulties, ", ") + "]"),
             "the difficulties of the challenges to download (positional after number)"
         )
         ("output,o", po::value<std::string>(&outputPath)->default_value("."), "the output path for the files (optional)")
@@ -90,26 +109,48 @@ int main(int argc, char* argv[])
     }
     const cpr::Header oauthHeader{ {"Authorization", "bearer " + token} };
 
+    // compute min and max challenges
+    int minChallenge = 0;
+    int maxChallenge = 0;
+    if (challengeRange == "all")
+    {
+        maxChallenge = getLatestChallengeNumber(oauthHeader);
+    }
+    else if (challengeRange.find('-') != std::string::npos)
+    {
+        std::vector<std::string> challengeParts{};
+        boost::split(challengeParts, challengeRange, boost::is_any_of("-"));
+        minChallenge = std::stoi(challengeParts[0]);
+        maxChallenge = std::stoi(challengeParts[1]);
+    }
+    else
+    {
+        minChallenge = maxChallenge = std::stoi(challengeRange);
+    }
+
     const cpr::Url oauthBase{ "https://oauth.reddit.com/" };
     cpr::Header queryHeaders{ oauthHeader };
     queryHeaders.insert(agent.begin(), agent.end());
-
     std::vector<cpr::AsyncResponse> requests{};
-    for (const std::string& diff : difficulties)
+
+    for (int challenge = minChallenge; challenge <= maxChallenge; ++challenge)
     {
-        requests.push_back(
-            cpr::GetAsync(
-                oauthBase + "r/dailyprogrammer/search",
-                cpr::Parameters{
-                    {"t", "all"},
-                    {"sort", "relevance"},
-                    {"q", std::to_string(challengeNum) + " [" + diff + "]"},
-                    {"restrict_sr", "true"},
-                    {"limit", "1"}
-                },
-                queryHeaders
-            )
-        );
+        for (const std::string& diff : difficulties)
+        {
+            requests.push_back(
+                cpr::GetAsync(
+                    oauthBase + "r/dailyprogrammer/search",
+                    cpr::Parameters{
+                        {"t", "all"},
+                        {"sort", "relevance"},
+                        {"q", '#' + std::to_string(challenge) + " [" + diff + "]"},
+                        {"restrict_sr", "true"},
+                        {"limit", "1"}
+                    },
+                    queryHeaders
+                )
+            );
+        }
     }
 
     // set output path
@@ -123,7 +164,8 @@ int main(int argc, char* argv[])
         if (postArrData.size() > 0)
         {
             const auto postData{ postArrData[0]["data"] };
-            const std::string title{ postData["title"] };
+            std::string title{ postData["title"] };
+            title.erase(std::remove(title.begin(), title.end(), '\n'), title.end());
             printf("Saving post \"%s\"\n", title.c_str());
             std::ofstream outputData{ title + ".md" };
             outputData << "## [" << title << "](" << std::string{ postData["url"] } << ")\n";
