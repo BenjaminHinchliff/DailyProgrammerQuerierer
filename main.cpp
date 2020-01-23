@@ -65,12 +65,12 @@ int main(int argc, char* argv[])
     const std::vector<std::string> defaultDifficulties{ "easy", "intermediate", "hard" };
     desc.add_options()
         ("help,h", "print help message to stdout")
-        ("number,n", po::value<std::string>(&challengeRange)->required(), "number of the challenges to download or range or all) (positional)")
+        ("number,n", po::value<std::string>(&challengeRange), "number of the challenges to download or range or all) (positional)")
         (
             "difficulties,d",
             po::value<std::vector<std::string>>(&difficulties)
                 ->multitoken()
-                ->default_value(defaultDifficulties, "[" + boost::algorithm::join(defaultDifficulties, ", ") + "]"),
+                ->default_value(defaultDifficulties, boost::algorithm::join(defaultDifficulties, " ")),
             "the difficulties of the challenges to download (positional after number)"
         )
         ("output,o", po::value<std::string>(&outputPath)->default_value("."), "the output path for the files (optional)")
@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
     );
     po::notify(vm);
 
-    if (vm.count("help"))
+    if (vm.count("help") || argc <= 1)
     {
         std::cout << desc << '\n';
         return 0;
